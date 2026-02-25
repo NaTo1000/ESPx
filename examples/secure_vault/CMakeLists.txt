@@ -1,0 +1,2 @@
+add_executable(example_secure_vault main.cpp)
+target_link_libraries(example_secure_vault PRIVATE espx)
