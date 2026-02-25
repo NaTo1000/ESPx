@@ -1,0 +1,2 @@
+add_executable(example_http_server main.cpp)
+target_link_libraries(example_http_server PRIVATE espx)
