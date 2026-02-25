@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.pytest_cache/
+.tox/
+.venv/
+venv/
+env/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Vault files (never commit real vaults)
+*.vault
+*.audit.jsonl
