@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESPx – iNFINITEAi2025</title>
+  <style>
+    /* ── Reset & base ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0500; }
+
+    /* ── Sky / desert gradient ─────────────────────────────────────────── */
+    #bg {
+      position: fixed; inset: 0; z-index: 0;
+      background: radial-gradient(ellipse at 50% 0%,
+        #ff8c00 0%, #c0390a 35%, #7a1a00 55%, #2a0d00 75%, #0a0500 100%);
+    }
+
+    /* ── Three.js canvas ───────────────────────────────────────────────── */
+    #three-canvas {
+      position: fixed; inset: 0; z-index: 1;
+      pointer-events: none;
+    }
+
+    /* ── Stars ─────────────────────────────────────────────────────────── */
+    #stars { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+
+    /* ── Ground / mesa silhouettes ─────────────────────────────────────── */
+    #ground {
+      position: fixed; bottom: 0; left: 0; width: 100%; z-index: 3;
+      pointer-events: none;
+    }
+
+    /* ── HUD overlay ────────────────────────────────────────────────────── */
+    #hud {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: clamp(12px, 2.5vw, 28px);
+      pointer-events: none;
+    }
+
+    /* ── Title ──────────────────────────────────────────────────────────── */
+    .title {
+      font-family: 'Georgia', 'Times New Roman', serif;
+      font-size: clamp(2rem, 6vw, 5rem);
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      color: transparent;
+      background: linear-gradient(135deg,
+        #fff0a0 0%, #ffd700 20%, #b8860b 40%, #ffd700 60%, #ffe87a 80%, #fff0a0 100%);
+      background-size: 300% 300%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      text-shadow: 0 0 40px rgba(255,215,0,.6);
+      animation: goldShine 4s ease infinite, fadeIn 1.2s ease;
+    }
+
+    /* ── Sub-title badge ────────────────────────────────────────────────── */
+    .subtitle {
+      font-family: 'Courier New', monospace;
+      font-size: clamp(.8rem, 2vw, 1.4rem);
+      color: #ffc040;
+      letter-spacing: .3em;
+      text-transform: uppercase;
+      opacity: .85;
+      animation: fadeIn 1.8s ease;
+    }
+
+    /* ── Infinity / infinity container ─────────────────────────────────── */
+    #infinity-wrap {
+      width: clamp(80px, 15vw, 180px);
+      height: clamp(40px, 7.5vw, 90px);
+      animation: fadeIn 2s ease;
+    }
+
+    /* ── Scene canvas (dolphin + ESP modules) ───────────────────────────── */
+    #scene-canvas {
+      position: fixed; bottom: 0; left: 0; width: 100%; z-index: 5;
+      pointer-events: none;
+    }
+
+    /* ── Loading bar ────────────────────────────────────────────────────── */
+    #loader-wrap {
+      width: clamp(160px, 40vw, 400px);
+      animation: fadeIn 2s ease;
+    }
+    #loader-label {
+      font-family: 'Courier New', monospace;
+      font-size: .75rem;
+      color: #ffd700;
+      letter-spacing: .2em;
+      margin-bottom: 6px;
+      text-align: center;
+    }
+    #loader-bar {
+      height: 6px; border-radius: 3px;
+      background: rgba(255,215,0,.15);
+      overflow: hidden;
+    }
+    #loader-fill {
+      height: 100%; width: 0; border-radius: 3px;
+      background: linear-gradient(90deg, #ffd700, #ff8c00);
+      transition: width .3s ease;
+      box-shadow: 0 0 8px #ffd700;
+    }
+
+    /* ── Keyframes ──────────────────────────────────────────────────────── */
+    @keyframes goldShine {
+      0%   { background-position: 0%   50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0%   50%; }
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    @keyframes twinkle { 0%,100% { opacity: .2; } 50% { opacity: 1; } }
+    @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes sway  { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+    @keyframes lasso {
+      0%   { stroke-dashoffset: 400; opacity:.6; }
+      50%  { stroke-dashoffset: 0;   opacity:1; }
+      100% { stroke-dashoffset: 400; opacity:.6; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Background ─────────────────────────────────────────────────── -->
+<div id="bg"></div>
+
+<!-- ── Three.js 3D canvas (infinity + gold text particles) ────────── -->
+<canvas id="three-canvas"></canvas>
+
+<!-- ── Star field ─────────────────────────────────────────────────── -->
+<svg id="stars" xmlns="http://www.w3.org/2000/svg"></svg>
+
+<!-- ── Ground silhouettes ─────────────────────────────────────────── -->
+<svg id="ground" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 220" preserveAspectRatio="none">
+  <!-- far mesa -->
+  <path d="M0,180 L180,80 L260,80 L320,140 L500,140 L560,60 L660,60 L720,140
+           L900,140 L960,90 L1040,90 L1100,150 L1280,150 L1340,100 L1440,100 L1440,220 L0,220Z"
+        fill="#1a0800" opacity=".9"/>
+  <!-- near mesa -->
+  <path d="M0,200 L80,160 L160,160 L200,190 L400,190 L440,155 L520,155 L560,200
+           L760,200 L800,165 L880,165 L920,200 L1120,200 L1160,162 L1240,162 L1280,200 L1440,200 L1440,220 L0,220Z"
+        fill="#0d0400" opacity="1"/>
+  <!-- cactus left -->
+  <g fill="#0d0400">
+    <rect x="110" y="145" width="8" height="40"/>
+    <rect x="95"  y="153" width="20" height="6"/>
+    <rect x="95"  y="144" width="6"  height="15"/>
+    <rect x="118" y="157" width="20" height="6"/>
+    <rect x="132" y="148" width="6"  height="15"/>
+  </g>
+  <!-- cactus right -->
+  <g fill="#0d0400">
+    <rect x="1310" y="148" width="8" height="37"/>
+    <rect x="1295" y="156" width="20" height="6"/>
+    <rect x="1295" y="147" width="6"  height="15"/>
+    <rect x="1318" y="160" width="20" height="6"/>
+    <rect x="1332" y="151" width="6"  height="15"/>
+  </g>
+  <!-- tumbleweed -->
+  <circle cx="700" cy="198" r="12" fill="none" stroke="#3a1a00" stroke-width="2" opacity=".7"/>
+  <line x1="694" y1="192" x2="706" y2="204" stroke="#3a1a00" stroke-width="1.5" opacity=".7"/>
+  <line x1="706" y1="192" x2="694" y2="204" stroke="#3a1a00" stroke-width="1.5" opacity=".7"/>
+  <line x1="700" y1="186" x2="700" y2="210" stroke="#3a1a00" stroke-width="1.5" opacity=".7"/>
+</svg>
+
+<!-- ── HUD ─────────────────────────────────────────────────────────── -->
+<div id="hud">
+  <!-- 3D-style gold calligraphy title -->
+  <div class="title">iNFINITEAi2025</div>
+  <div class="subtitle">ESPx &nbsp;·&nbsp; Full ESP32 Wireless Suite</div>
+
+  <!-- Animated infinity symbol (SVG + CSS) -->
+  <svg id="infinity-wrap" viewBox="0 0 200 90" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%"   stop-color="#fff0a0"/>
+        <stop offset="30%"  stop-color="#ffd700"/>
+        <stop offset="60%"  stop-color="#b8860b"/>
+        <stop offset="100%" stop-color="#ffd700"/>
+      </linearGradient>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <!-- ∞ drawn as two lobes -->
+    <path d="M100,45
+             C100,20 130,10 150,10 C180,10 195,28 195,45
+             C195,62 180,80 150,80 C130,80 100,70 100,45
+             C100,20  70,10  50,10 C20,10   5,28   5,45
+             C5,62   20,80  50,80 C70,80  100,70 100,45Z"
+          fill="none" stroke="url(#lg)" stroke-width="5"
+          filter="url(#glow)"
+          stroke-dasharray="500" stroke-dashoffset="500"
+          style="animation: lasso 3s ease-in-out infinite;"/>
+    <!-- solid glow fill -->
+    <path d="M100,45
+             C100,20 130,10 150,10 C180,10 195,28 195,45
+             C195,62 180,80 150,80 C130,80 100,70 100,45
+             C100,20  70,10  50,10 C20,10   5,28   5,45
+             C5,62   20,80  50,80 C70,80  100,70 100,45Z"
+          fill="url(#lg)" opacity=".12"/>
+  </svg>
+
+  <!-- Loading bar -->
+  <div id="loader-wrap">
+    <div id="loader-label">INITIALISING SYSTEM…</div>
+    <div id="loader-bar"><div id="loader-fill"></div></div>
+  </div>
+</div>
+
+<!-- ── Scene canvas: dolphin + ESP modules ────────────────────────── -->
+<canvas id="scene-canvas"></canvas>
+
+<!-- ── Three.js (CDN) ─────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.min.js"></script>
+
+<script>
+// ════════════════════════════════════════════════════════════════════
+//  STAR FIELD
+// ════════════════════════════════════════════════════════════════════
+(function buildStars() {
+  const svg = document.getElementById('stars');
+  const W = window.innerWidth, H = window.innerHeight;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  for (let i = 0; i < 160; i++) {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const x = Math.random() * W, y = Math.random() * H * 0.6;
+    const r = Math.random() * 1.6 + 0.3;
+    c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', r);
+    c.setAttribute('fill', `hsl(${40 + Math.random()*20},80%,${70 + Math.random()*30}%)`);
+    c.style.animation = `twinkle ${2 + Math.random()*3}s ${Math.random()*3}s ease-in-out infinite`;
+    svg.appendChild(c);
+  }
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  2-D SCENE CANVAS  (dolphin + ESP32 modules)
+// ════════════════════════════════════════════════════════════════════
+(function buildScene() {
+  const canvas = document.getElementById('scene-canvas');
+  const ctx    = canvas.getContext('2d');
+  let W, H, t = 0;
+  const espModules = [
+    { x: 0.18, bobOffset: 0,    swayOffset: 0    },
+    { x: 0.38, bobOffset: 1.1,  swayOffset: 0.8  },
+    { x: 0.62, bobOffset: 2.1,  swayOffset: 1.6  },
+    { x: 0.82, bobOffset: 0.5,  swayOffset: 0.4  },
+  ];
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ── draw ESP32 module ────────────────────────────────────────────
+  function drawESP(ctx, x, y, scale) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    // PCB body
+    ctx.fillStyle = '#1a4a1a';
+    ctx.strokeStyle = '#39ff14';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(-22, -14, 44, 28, 3);
+    ctx.fill(); ctx.stroke();
+    // chip
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-10, -8, 20, 16);
+    ctx.fillStyle = '#555';
+    ctx.font = 'bold 5px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('ESP32', 0, 2);
+    // pins left
+    ctx.fillStyle = '#c0a000';
+    for (let i = 0; i < 5; i++) {
+      ctx.fillRect(-26, -10 + i*5, 4, 3);
+    }
+    // pins right
+    for (let i = 0; i < 5; i++) {
+      ctx.fillRect(22,  -10 + i*5, 4, 3);
+    }
+    // wifi icon glow
+    ctx.strokeStyle = '#39ff14';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 3 + y);
+    for (let a = 1; a <= 3; a++) {
+      ctx.beginPath();
+      ctx.arc(0, -20, a * 3.5, Math.PI + 0.4, -0.4);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ── draw simple flipper-zero-style dolphin ───────────────────────
+  function drawDolphin(ctx, x, y, scale, flip) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(flip ? -scale : scale, scale);
+    ctx.translate(-10, 0);
+
+    // tail fin
+    ctx.fillStyle = '#1e90ff';
+    ctx.beginPath();
+    ctx.moveTo(-38, 0);
+    ctx.lineTo(-55, -14);
+    ctx.lineTo(-50, 0);
+    ctx.lineTo(-55,  14);
+    ctx.closePath();
+    ctx.fill();
+
+    // body
+    ctx.fillStyle = '#1e90ff';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 38, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // belly
+    ctx.fillStyle = '#b0d8ff';
+    ctx.beginPath();
+    ctx.ellipse(8, 4, 22, 8, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // dorsal fin
+    ctx.fillStyle = '#0070cc';
+    ctx.beginPath();
+    ctx.moveTo(5, -16);
+    ctx.lineTo(20, -30);
+    ctx.lineTo(28, -16);
+    ctx.closePath();
+    ctx.fill();
+
+    // snout
+    ctx.fillStyle = '#1e90ff';
+    ctx.beginPath();
+    ctx.ellipse(40, -4, 12, 6, -0.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    // eye
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(28, -7, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(29.2, -7.8, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // smile
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(34, -1, 6, 0.1, Math.PI * 0.6);
+    ctx.stroke();
+
+    // hat (cowboy)
+    ctx.fillStyle = '#5a2d00';
+    ctx.beginPath();
+    ctx.ellipse(20, -23, 13, 4, 0, 0, Math.PI * 2); // brim
+    ctx.fill();
+    ctx.fillRect(10, -42, 20, 20); // crown
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(10, -42, 20, 3);  // hat band
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 4px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('★', 20, -40);
+
+    ctx.restore();
+  }
+
+  // ── draw lasso rope between dolphin and esp module ───────────────
+  function drawLasso(ctx, x1, y1, x2, y2, phase) {
+    ctx.save();
+    ctx.strokeStyle = `rgba(210,140,50,${0.5 + 0.3 * Math.sin(phase)})`;
+    ctx.lineWidth   = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.lineDashOffset = -t * 30;
+    const mx = (x1 + x2) / 2;
+    const my = Math.min(y1, y2) - 40 + 15 * Math.sin(phase);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(mx, my, x2, y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── main animation loop ──────────────────────────────────────────
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    t += 0.016;
+
+    const groundY  = H * 0.82;
+    const dolphinX = W * (0.5 + 0.25 * Math.sin(t * 0.7));
+    const dolphinY = groundY - 70 + 10 * Math.sin(t * 1.1);
+    const flip     = Math.cos(t * 0.7) < 0;
+
+    // ESP modules
+    espModules.forEach((m) => {
+      const ex = W * m.x;
+      const ey = groundY - 80 + 8 * Math.sin(t * 1.3 + m.bobOffset);
+      const sway = 0.08 * Math.sin(t * 0.9 + m.swayOffset);
+      drawLasso(ctx, dolphinX + (flip ? -40 : 40), dolphinY - 10,
+                ex, ey, t * 2 + m.swayOffset);
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.rotate(sway);
+      drawESP(ctx, 0, 0, 1 + 0.06 * Math.sin(t + m.bobOffset));
+      ctx.restore();
+    });
+
+    // Dolphin (on top of ropes)
+    drawDolphin(ctx, dolphinX, dolphinY, 1.1, flip);
+
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  THREE.JS  –  3-D floating gold particles + rotating torus-knot
+//  representing the infinity / AI loop
+// ════════════════════════════════════════════════════════════════════
+(function buildThree() {
+  if (typeof THREE === 'undefined') return; // CDN unavailable (offline)
+
+  const canvas   = document.getElementById('three-canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  const scene  = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 0, 12);
+
+  // Ambient + point lights for gold sheen
+  scene.add(new THREE.AmbientLight(0xffd700, 0.6));
+  const ptLight = new THREE.PointLight(0xff8c00, 2, 40);
+  ptLight.position.set(5, 5, 8);
+  scene.add(ptLight);
+
+  // ── Torus-knot as 3-D "∞" proxy ──────────────────────────────────
+  const knotGeo = new THREE.TorusKnotGeometry(1.8, 0.45, 180, 24, 2, 3);
+  const knotMat = new THREE.MeshStandardMaterial({
+    color: 0xffd700,
+    metalness: 0.95,
+    roughness: 0.12,
+    emissive: 0xb8860b,
+    emissiveIntensity: 0.25,
+  });
+  const knot = new THREE.Mesh(knotGeo, knotMat);
+  knot.position.set(0, 1.8, 0);
+  scene.add(knot);
+
+  // ── Gold dust particles ───────────────────────────────────────────
+  const PART_COUNT = 600;
+  const positions  = new Float32Array(PART_COUNT * 3);
+  for (let i = 0; i < PART_COUNT; i++) {
+    positions[i * 3]     = (Math.random() - 0.5) * 28;
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 14;
+  }
+  const partGeo = new THREE.BufferGeometry();
+  partGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const partMat = new THREE.PointsMaterial({ color: 0xffd700, size: 0.07, transparent: true, opacity: 0.7 });
+  scene.add(new THREE.Points(partGeo, partMat));
+
+  // ── Resize handler ────────────────────────────────────────────────
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ── Render loop ───────────────────────────────────────────────────
+  let t3 = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    t3 += 0.012;
+    knot.rotation.x = t3 * 0.5;
+    knot.rotation.y = t3 * 0.8;
+    ptLight.position.x = Math.sin(t3) * 6;
+    ptLight.position.y = Math.cos(t3 * 0.7) * 4 + 2;
+    renderer.render(scene, camera);
+  }
+  animate();
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  LOADING BAR  (simulated startup progress)
+// ════════════════════════════════════════════════════════════════════
+(function runLoader() {
+  const fill  = document.getElementById('loader-fill');
+  const label = document.getElementById('loader-label');
+  const steps = [
+    [10,  'LOADING FIRMWARE MANIFESTS…'],
+    [25,  'CONNECTING ESP32 MODULES…'],
+    [40,  'INITIALISING AI PIPELINE…'],
+    [58,  'FETCHING UPDATE FEEDS…'],
+    [72,  'WARMING CACHE (NVMe)…'],
+    [88,  'RUNNING RESEARCH AGENTS…'],
+    [100, 'SYSTEM READY  ✓'],
+  ];
+  let i = 0;
+  function next() {
+    if (i >= steps.length) return;
+    const [pct, msg] = steps[i++];
+    fill.style.width  = pct + '%';
+    label.textContent = msg;
+    if (pct < 100) setTimeout(next, 600 + Math.random() * 400);
+  }
+  next();
+})();
+</script>
+</body>
+</html>
